@@ -1,0 +1,10 @@
+# Godot 4.x キャッシュとインポート（必須）
+.godot/
+.import/
+
+# エクスポート設定（パスワード等が含まれる場合があるため）
+export_preset.cfg
+
+# クラッシュログやビルド成果物
+*.log
+android/
