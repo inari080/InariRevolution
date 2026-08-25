@@ -45,10 +45,16 @@ const tex_electron = preload("res://electron.png")
 const tex_photon = preload("res://photon.png")
 
 func _ready() -> void:
-	# ★【追加】このノード(Main)自身の当たり判定を画面全体に広げる。
-	# これが無いと、黒い遊び場の広い範囲でドラッグ&ドロップの
-	# _can_drop_data / _drop_data が呼ばれず、外に出しても反応しなかった。
+	# このノード(Main)自身の当たり判定を画面全体に広げる
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	
+	# ★【追加】"Background"(黒い背景のColorRect)がデフォルトのmouse_filter(STOP)
+	# のままだと、何もない黒い空間でのドラッグ&ドロップをこのノードが横取りしてしまい、
+	# 親であるmain(このスクリプト)の _drop_data() まで届かない。
+	# → マウス判定を無視するようにして、ちゃんと下(main)まで通す。
+	var background = get_node_or_null("Background")
+	if background:
+		background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _process(delta: float) -> void:
 	var mouse_pos = get_global_mouse_position()
