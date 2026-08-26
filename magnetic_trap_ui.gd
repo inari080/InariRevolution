@@ -59,6 +59,10 @@ var panel_height: float = 0.0
 class TrapSlot:
 	extends Panel
 	
+	# ★TrapSlotは内部クラスのため外側の定数(STACK_CAP)に直接アクセスできない。
+	#   ここでも同じ値を持たせておく（外側のSTACK_CAPを変えたらこちらも合わせて変更）
+	const CAP: int = 10
+	
 	var slot_type: String = ""
 	var count: int = 0
 	var icon_label: Label
@@ -178,6 +182,26 @@ class TrapSlot:
 		set_drag_preview(preview)
 		
 		return data
+	
+	# ★【追加】インベントリーバー（下部の粒子バー）や他の磁気トラップスロットからの
+	# ドラッグを受け入れる：空きがある（または同じ種類でスタックに余裕がある）時だけOK
+	func _can_drop_data(_at_position: Vector2, data) -> bool:
+		if typeof(data) != TYPE_DICTIONARY or not data.has("particle_type"):
+			return false
+		return has_room(data["particle_type"], CAP)
+	
+	func _drop_data(_at_position: Vector2, data) -> void:
+		if not (typeof(data) == TYPE_DICTIONARY and data.has("particle_type")):
+			return
+		if not add_one(data["particle_type"], CAP):
+			return
+		
+		# 移動元がインベントリーバーのスロットなら、そちらを空にする
+		if data.has("source_slot") and is_instance_valid(data["source_slot"]):
+			data["source_slot"].clear()
+		# 移動元が別の磁気トラップスロットなら、そちらを1個減らす
+		elif data.has("source_trap_slot") and is_instance_valid(data["source_trap_slot"]) and data["source_trap_slot"] != self:
+			data["source_trap_slot"].remove_one()
 
 func _ready() -> void:
 	# 自分自身はマウスを奪わない（子のボタン/パネルだけが反応する）

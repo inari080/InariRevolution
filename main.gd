@@ -17,6 +17,8 @@ class ElementItem:
 	var close_particles: Array = []
 	var stable_time: float = 0.0
 	var is_grouped: bool = false
+	var ungroup_timer: float = 0.0 # ★グループ範囲から外れてからの経過時間（1秒でグループ解除）
+	var photon_bonus_cooldown: float = 0.0 # ★反発による光子ボーナスの連発を防ぐクールダウン
 	
 	# ★【追加】クォーク3個1組の合体判定用：近くにクォークが2個以上いる状態が続いた時間
 	var quark_group_time: float = 0.0
@@ -90,11 +92,15 @@ func _process(delta: float) -> void:
 	# --- 1. 密着状態の事前調査カウンター ---
 	for item in elements:
 		item.close_particles.clear()
+		item.photon_bonus_cooldown = max(0.0, item.photon_bonus_cooldown - delta) # ★光子ボーナスのクールダウン更新
 		
 	for i in range(elements.size()):
 		var item_a = elements[i]
 		for j in range(i + 1, elements.size()):
 			var item_b = elements[j]
+			# ★光子はグループを作らない（他の粒子のグループにもカウントされない）
+			if item_a.name == "Photon" or item_b.name == "Photon":
+				continue
 			if item_a.position.distance_to(item_b.position) < 80.0:
 				item_a.close_particles.append(item_b)
 				item_b.close_particles.append(item_a)
@@ -102,12 +108,17 @@ func _process(delta: float) -> void:
 	for item in elements:
 		if item.close_particles.size() >= 2:
 			item.stable_time += delta
+			item.ungroup_timer = 0.0 # ★範囲内に戻ったので解除タイマーをリセット
 			if item.stable_time >= 3.0:
 				item.is_grouped = true
 		else:
-			item.stable_time = 0.0
-			item.is_grouped = false
-			if item.sprite: item.sprite.modulate = item.color
+			# ★即座に解除せず、範囲外の状態が1秒間続いて初めてグループを解除する
+			# （1秒以内に範囲へ戻ればグループは継続する）
+			item.ungroup_timer += delta
+			if item.ungroup_timer >= 1.0:
+				item.stable_time = 0.0
+				item.is_grouped = false
+				if item.sprite: item.sprite.modulate = item.color
 
 	# --- 2. 磁力 ＆ 反発計算 ---
 	for i in range(elements.size()):
@@ -118,10 +129,17 @@ func _process(delta: float) -> void:
 			
 		if not item_a.has_bounced or item_a.bounce_timer < 3.0:
 			continue
+		
+		# ★光子は何にも引き寄せられず、何も引き寄せず、反発もしない（完全に無関係でいる）
+		if item_a.name == "Photon":
+			continue
 			
 		for j in range(i + 1, elements.size()):
 			var item_b = elements[j]
 			if not item_b.has_bounced or item_b.bounce_timer < 3.0:
+				continue
+			
+			if item_b.name == "Photon":
 				continue
 				
 			var to_b = item_b.position - item_a.position
@@ -132,7 +150,11 @@ func _process(delta: float) -> void:
 					var mid_pos = item_a.position + (to_b / 2)
 					create_chemical_spark(mid_pos)
 			
-			if distance > 10.0 and distance < 400.0:
+			# ★【修正】距離の下限を10.0→0.5に緩和。
+			# 密集しすぎて距離が10未満になると力が一切働かず、グループが固まって
+			# 動かなくなってしまい、（別の場所で）光子が生まれたタイミングだけ
+			# たまたま動き出したように見えるバグの原因だったため。
+			if distance > 0.5 and distance < 400.0:
 				var direction = to_b.normalized()
 				var base_force = 4000.0 / (distance * distance)
 				base_force = clamp(base_force, 0.1, 8.0)
@@ -155,6 +177,18 @@ func _process(delta: float) -> void:
 					
 					item_a.velocity += direction * repel_force * 60.0 * delta
 					item_b.velocity -= direction * repel_force * 60.0 * delta
+					
+					# ★【変更】反発が起きた瞬間、クォークか電子どうしの反発の時だけ、
+					#   5%の確率でご褒美として光子が1個生まれる（陽子が絡む反発では出さない）
+					var a_is_qe = item_a.name == "Quark" or item_a.name == "Electron"
+					var b_is_qe = item_b.name == "Quark" or item_b.name == "Electron"
+					var bonus_eligible = a_is_qe and b_is_qe
+					
+					if bonus_eligible and item_a.photon_bonus_cooldown <= 0.0 and item_b.photon_bonus_cooldown <= 0.0 and randf() < 0.05:
+						var mid_pos_repel = item_a.position + (to_b / 2)
+						_create_and_register_element("Photon", mid_pos_repel)
+						item_a.photon_bonus_cooldown = 3.0
+						item_b.photon_bonus_cooldown = 3.0
 				else:
 					if item_a.sprite and item_a.stable_time < 3.0: item_a.sprite.modulate = item_a.color
 					if item_b.sprite and item_b.stable_time < 3.0: item_b.sprite.modulate = item_b.color
@@ -163,11 +197,26 @@ func _process(delta: float) -> void:
 					item_b.velocity -= direction * base_force * 60.0 * delta
 
 	# --- 3. 通常の移動・壁バウンド・マウス吸い込み処理 ---
+	const PAIR_STILL_SPEED: float = 6.0 # ★ペア(2個1組)がこの速さを下回ったら「ほぼ止まった」とみなす
+	
 	for i in range(elements.size() - 1, -1, -1):
 		var item = elements[i]
 		
-		# 安定グループにいなければ寿命を進める
-		if not item.is_grouped:
+		# ★寿命の進み方のルール:
+		#   ・光子(Photon)：安定しているので寿命そのものが尽きない
+		#   ・3個以上の安定グループ(is_grouped)：グループでいる間は寿命が尽きない（従来通り）
+		#   ・2個1組のペア（close_particles.size()==1）：お互いの動きがほとんど止まるまでは
+		#     寿命が尽きず、ほぼ止まったら（PAIR_STILL_SPEED未満）寿命カウントが再始動する
+		#   ・それ以外：通常通り毎フレーム寿命が進む
+		var life_paused: bool = false
+		if item.name == "Photon":
+			life_paused = true
+		elif item.is_grouped:
+			life_paused = true
+		elif item.close_particles.size() == 1 and item.velocity.length() > PAIR_STILL_SPEED:
+			life_paused = true
+		
+		if not life_paused:
 			item.lifetime += delta
 		
 		# ★寿命を迎えて粒子が消滅したときのペナルティ処理
@@ -381,10 +430,11 @@ func spawn_elements(start_pos: Vector2, count: int) -> void:
 		var roll = randf_range(0.0, 100.0)
 		var type_name = ""
 		
-		# ★【変更】光子の出現率を20%→10%に引き下げ（浮いた10%は電子に加算）
-		if roll < 50.0:
+		# ★【変更】光子の出現率を10%→1%に引き下げ、浮いた9%はクォークと電子に均等配分
+		#   Quark: 50% → 54.5% / Electron: 40% → 44.5% / Photon: 10% → 1%
+		if roll < 54.5:
 			type_name = "Quark"
-		elif roll < 90.0:
+		elif roll < 99.0:
 			type_name = "Electron"
 		else:
 			type_name = "Photon"
@@ -400,7 +450,8 @@ func spawn_single_element(type_name: String, start_pos: Vector2) -> void:
 func _create_and_register_element(type_name: String, start_pos: Vector2) -> void:
 	var item = ElementItem.new()
 	item.position = start_pos
-	item.max_lifetime = randf_range(30.0, 50.0)
+	# ★陽子(Proton)は安定した粒子なので、他の粒子よりずっと長く（3分）存在し続ける
+	item.max_lifetime = 180.0 if type_name == "Proton" else randf_range(30.0, 50.0)
 	
 	var type_color: Color
 	var type_tex
@@ -479,8 +530,13 @@ func create_new_cube(spawn_position: Vector2) -> void:
 	add_child(new_cube)
 
 func create_chemical_spark(spark_position: Vector2) -> void:
+	# ★磁気トラップ画面が開いている間（＝粒子が非表示の間）は火花も出さない
+	if not mouse_interaction_enabled:
+		return
+	
 	var spark = CPUParticles2D.new()
 	spark.global_position = spark_position
+	spark.z_index = 1000 # ★磁気トラップ画面などのUIより手前に描画されるようにする
 	
 	spark.amount = 5
 	spark.lifetime = 0.4
@@ -501,6 +557,10 @@ func create_chemical_spark(spark_position: Vector2) -> void:
 
 # ★【追加】粒子が画面端の壁に反射した瞬間に出す小さな光のエフェクト
 func create_wall_bounce_effect(bounce_position: Vector2, particle_color: Color) -> void:
+	# ★磁気トラップ画面が開いている間（＝粒子が非表示の間）はこの火花も出さない
+	if not mouse_interaction_enabled:
+		return
+	
 	var spark = CPUParticles2D.new()
 	spark.global_position = bounce_position
 	
