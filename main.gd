@@ -17,6 +17,9 @@ class ElementItem:
 	var close_particles: Array = []
 	var stable_time: float = 0.0
 	var is_grouped: bool = false
+	
+	# ★【追加】クォーク3個1組の合体判定用：近くにクォークが2個以上いる状態が続いた時間
+	var quark_group_time: float = 0.0
 
 # 画面上の粒子たちを記録するリスト
 var elements: Array[ElementItem] = []
@@ -32,6 +35,10 @@ const FLY_SPEED: float = 800.0
 const FRICTION_THRESHOLD: float = 250.0
 const FRICTION_COEFF_LOW: float = 0.15
 const FRICTION_COEFF_HIGH: float = 3.0
+
+# ★【追加】クォーク3個1組 → 陽子(Proton)への合体条件
+const QUARK_FUSION_DISTANCE: float = 70.0 # この距離以内なら「近くにいる」とみなす
+const QUARK_FUSION_TIME: float = 3.0      # この秒数だけ3個以上でまとまり続けたら合体する
 
 # HPに応じた出現数の調整用パラメータ
 # 「壊れた瞬間のHP(round_capacity)」が少ないほど出現数を少なく、
@@ -76,6 +83,9 @@ func _process(delta: float) -> void:
 	var radius = 24.0
 	
 	const FADE_DURATION: float = 3.0
+	
+	# --- 0. クォーク3個1組の合体判定（陽子への変化） ---
+	_process_quark_fusion(delta)
 	
 	# --- 1. 密着状態の事前調査カウンター ---
 	for item in elements:
@@ -282,6 +292,70 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	pass
 
+# ★【追加】クォークが3個以上近くでまとまっている状態が一定時間続いたら、
+# そのうち3個を陽子(Proton)1個に変化させる。
+func _process_quark_fusion(delta: float) -> void:
+	var quark_items: Array = []
+	for item in elements:
+		if item.name == "Quark":
+			quark_items.append(item)
+	
+	# 各クォークについて、近くにいる「他のクォーク」の数を数え、
+	# 2個以上近くにいれば（＝自分を含めて3個以上のまとまり）継続時間を進める。
+	# 条件から外れたら継続時間はリセットする。
+	for i in range(quark_items.size()):
+		var item_a = quark_items[i]
+		var nearby_quark_count: int = 0
+		for j in range(quark_items.size()):
+			if i == j:
+				continue
+			if item_a.position.distance_to(quark_items[j].position) < QUARK_FUSION_DISTANCE:
+				nearby_quark_count += 1
+		
+		if nearby_quark_count >= 2:
+			item_a.quark_group_time += delta
+		else:
+			item_a.quark_group_time = 0.0
+	
+	# 継続時間の条件を満たしたクォークどうしを3個1組にまとめて合体させる
+	var used: Array = []
+	for i in range(quark_items.size()):
+		var item_a = quark_items[i]
+		if item_a.quark_group_time < QUARK_FUSION_TIME or item_a in used:
+			continue
+		
+		var partners: Array = []
+		for j in range(quark_items.size()):
+			if i == j:
+				continue
+			var item_b = quark_items[j]
+			if item_b in used or item_b.quark_group_time < QUARK_FUSION_TIME:
+				continue
+			if item_a.position.distance_to(item_b.position) < QUARK_FUSION_DISTANCE:
+				partners.append(item_b)
+			if partners.size() >= 2:
+				break
+		
+		if partners.size() >= 2:
+			var trio: Array = [item_a, partners[0], partners[1]]
+			used.append_array(trio)
+			_fuse_quarks_into_proton(trio)
+
+# クォーク3個をまとめて消し、その中心位置に陽子(Proton)を1個生成する
+func _fuse_quarks_into_proton(trio: Array) -> void:
+	var center_pos: Vector2 = Vector2.ZERO
+	for item in trio:
+		center_pos += item.position
+	center_pos /= trio.size()
+	
+	for item in trio:
+		if item.sprite:
+			item.sprite.queue_free()
+		elements.erase(item)
+	
+	create_chemical_spark(center_pos) # 合体の瞬間を光の火花で目立たせる（流用）
+	_create_and_register_element("Proton", center_pos)
+
 # ★【追加】磁気トラップ画面（別画面切り替え）を開いている間、
 # 浮遊中の粒子スプライトを隠す/戻すための切り替え関数。
 # キューブ自体は magnetic_trap_ui.gd 側から call_group("cubes","hide"/"show") で制御する。
@@ -341,6 +415,11 @@ func _create_and_register_element(type_name: String, start_pos: Vector2) -> void
 		"Photon":
 			type_color = Color(4.0, 4.0, 1.0, 1.0)
 			type_tex = tex_photon
+		"Proton":
+			# ★【追加】陽子専用の画像がまだ無いので、当面はクォークの画像を
+			# 少し大きく・金色っぽい色味で流用する（画像を用意でき次第、専用テクスチャに差し替え可）
+			type_color = Color(4.0, 2.6, 0.6, 1.0)
+			type_tex = tex_quark
 		_:
 			type_color = Color(3.0, 3.0, 3.0, 1.0)
 			type_tex = tex_quark
@@ -356,7 +435,8 @@ func _create_and_register_element(type_name: String, start_pos: Vector2) -> void
 	if sp.texture:
 		var tex_size = sp.texture.get_size()
 		if tex_size.x > 0 and tex_size.y > 0:
-			sp.scale = Vector2(48.0 / tex_size.x, 48.0 / tex_size.y)
+			var target_size: float = 64.0 if type_name == "Proton" else 48.0 # ★陽子は一回り大きく表示
+			sp.scale = Vector2(target_size / tex_size.x, target_size / tex_size.y)
 	
 	add_child(sp)
 	item.sprite = sp

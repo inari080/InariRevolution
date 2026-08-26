@@ -69,6 +69,8 @@ class InventorySlot:
 				return {"text": "e⁻", "color": Color(0.4, 1.0, 0.5)}
 			"Photon":
 				return {"text": "γ", "color": Color(1.0, 0.95, 0.4)}
+			"Proton":
+				return {"text": "p⁺", "color": Color(1.0, 0.75, 0.3)}
 			_:
 				return {"text": "?", "color": Color(0.8, 0.8, 0.8)}
 	
