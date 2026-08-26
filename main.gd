@@ -61,13 +61,18 @@ func _process(delta: float) -> void:
 func spawn_elements(start_pos: Vector2, count: int) -> void:
 	particle_pool.spawn_elements(start_pos, count)
 
-# ★ 磁気トラップUI画面の開閉に連動して、粒子と吸い寄せの有効化/無効化を切り替える関数
+# ★ 磁気トラップUI画面の開閉に連動して、粒子の【状態（State）】を遷移させる
 func set_particles_visible(v: bool) -> void:
 	ui_event_handler.mouse_interaction_enabled = v
 	particle_pool.mouse_interaction_enabled = v
-	for item in game_logic.elements:
-		if item.sprite:
-			item.sprite.visible = v
+	
+	# 👈 状態遷移を明示的に呼び出す
+	if v:
+		AppLogger.info("ゲームフィールド活性化: 粒子を ACTIVE 状態へ遷移")
+		game_logic.set_all_particles_state(GameLogic.ParticleState.ACTIVE)
+	else:
+		AppLogger.info("ゲームフィールド非活性化: 粒子を SUSPENDED 状態へ遷移")
+		game_logic.set_all_particles_state(GameLogic.ParticleState.SUSPENDED)
 
 # --- ドラッグ＆ドロップのイベントを UIEventHandler に丸投げして仲介 ---
 

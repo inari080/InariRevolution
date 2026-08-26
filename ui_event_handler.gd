@@ -19,6 +19,12 @@ func _init(p_game_logic: GameLogic, p_particle_pool: ParticlePool, p_parent: Con
 func process_mouse_attraction(delta: float, mouse_pos: Vector2, screen_size: Vector2, radius: float) -> void:
 	for i in range(game_logic.elements.size() - 1, -1, -1):
 		var item = game_logic.elements[i]
+		
+		# 👈 状態遷移の明確化：ACTIVE 状態の粒子のみマウスインタラクションを受け付ける
+		if item.current_state != GameLogic.ParticleState.ACTIVE:
+			item.is_attracted = false
+			continue
+			
 		var dist_to_mouse = item.position.distance_to(mouse_pos)
 		
 		# 生まれてすぐ（0.3秒未満）は吸い寄せない
