@@ -27,6 +27,8 @@ const SIDEBAR_WIDTH: float = 190.0
 const SIDEBAR_TOP_MARGIN: float = 20.0
 const ROW_HEIGHT: float = 50.0
 const ICON_CIRCLE_SIZE: float = 30.0
+const SIDEBAR_ROW_GAP: float = 8.0
+const SIDEBAR_ROW_PADDING: float = 8.0
 
 # 粒子インベントリー（グリッド画面）
 const GRID_COLUMNS: int = 6
@@ -207,9 +209,14 @@ func _build_sidebar() -> void:
 	add_child(reserved_column)
 	
 	# タブの行を積むコンテナ（帯の上部に配置。下は今後タブが増えるまで空のまま）
+	# ★行と行の間に隙間(SIDEBAR_ROW_GAP)、帯の内側に余白(SIDEBAR_ROW_PADDING)を持たせて
+	#   四角い枠がそれぞれ独立したボタンに見えるようにする
+	var row_count := 2
+	var sidebar_content_height: float = ROW_HEIGHT * row_count + SIDEBAR_ROW_GAP * (row_count - 1) + SIDEBAR_ROW_PADDING * 2
+	
 	sidebar_bg = Panel.new()
-	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT * 2)
-	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT * 2)
+	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
+	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
 	sidebar_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var bg_style := StyleBoxFlat.new()
@@ -218,7 +225,11 @@ func _build_sidebar() -> void:
 	
 	var rows_vbox := VBoxContainer.new()
 	rows_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rows_vbox.add_theme_constant_override("separation", 0)
+	rows_vbox.offset_left = SIDEBAR_ROW_PADDING
+	rows_vbox.offset_right = -SIDEBAR_ROW_PADDING
+	rows_vbox.offset_top = SIDEBAR_ROW_PADDING
+	rows_vbox.offset_bottom = -SIDEBAR_ROW_PADDING
+	rows_vbox.add_theme_constant_override("separation", SIDEBAR_ROW_GAP)
 	sidebar_bg.add_child(rows_vbox)
 	
 	# ★【追加】一番上：黒い空間（遊び場）に戻るボタン
@@ -232,23 +243,46 @@ func _build_sidebar() -> void:
 
 # サイドバーに1行追加する（アイコン丸バッジ＋テキスト）。押せるButtonを返す。
 # ★スタイル(通常時/選択時)はボタン自身にメタデータとして保持する（複数行あっても混ざらないように）
+# ★四角い枠＋ホバー時に icon_color で光る演出つき
 func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: String, icon_color: Color) -> Button:
 	var row := Button.new()
-	row.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
+	row.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.focus_mode = Control.FOCUS_NONE
-	row.flat = true
+	row.flat = false # ★falseにしないと通常時のスタイル(枠線)が描画されない
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var style_normal := StyleBoxFlat.new()
-	style_normal.bg_color = Color(0.13, 0.13, 0.15, 0.0) # 通常時は透明（サイドバー背景がそのまま見える）
+	style_normal.bg_color = Color(0.15, 0.15, 0.17, 0.9)
+	style_normal.border_color = Color(1.0, 1.0, 1.0, 0.12)
+	style_normal.set_border_width_all(1)
+	style_normal.corner_radius_top_left = 10
+	style_normal.corner_radius_top_right = 10
+	style_normal.corner_radius_bottom_left = 10
+	style_normal.corner_radius_bottom_right = 10
 	
+	# ★ホバー時：枠の色をアイコンの色にして、外側に光彩(shadow)を出す＝「光る」演出
 	var style_hover := StyleBoxFlat.new()
-	style_hover.bg_color = Color(1.0, 1.0, 1.0, 0.06)
+	style_hover.bg_color = Color(0.20, 0.20, 0.23, 0.95)
+	style_hover.border_color = icon_color
+	style_hover.set_border_width_all(2)
+	style_hover.corner_radius_top_left = 10
+	style_hover.corner_radius_top_right = 10
+	style_hover.corner_radius_bottom_left = 10
+	style_hover.corner_radius_bottom_right = 10
+	style_hover.shadow_color = Color(icon_color.r, icon_color.g, icon_color.b, 0.55)
+	style_hover.shadow_size = 10
 	
 	var style_selected := StyleBoxFlat.new()
 	style_selected.bg_color = Color(0.55, 0.56, 0.58, 1.0)
+	style_selected.border_color = icon_color
+	style_selected.set_border_width_all(2)
 	style_selected.corner_radius_top_left = 10
+	style_selected.corner_radius_top_right = 10
 	style_selected.corner_radius_bottom_left = 10
+	style_selected.corner_radius_bottom_right = 10
+	style_selected.shadow_color = Color(icon_color.r, icon_color.g, icon_color.b, 0.45)
+	style_selected.shadow_size = 8
 	
 	row.add_theme_stylebox_override("normal", style_normal)
 	row.add_theme_stylebox_override("hover", style_hover)
@@ -419,6 +453,11 @@ func _reposition_ui() -> void:
 		panel.position.y = 0.0 if is_open else CLOSED_Y_OFFSET
 		panel.modulate.a = 1.0 if is_open else 0.0
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_open else Control.MOUSE_FILTER_IGNORE
+		# ★重要：閉じている間は visible = false にして完全に入力判定から外す。
+		# modulate.a=0 と mouse_filter=IGNORE だけでは、パネル内の子要素
+		# （グリッドスロットなど、それぞれ独自の mouse_filter=STOP を持つ）が
+		# 透明なまま黒い遊び場のクリックを裏で奪ってしまう。
+		panel.visible = is_open
 
 # --------------------------------------------------------------
 # 開閉トグル（画面切り替え）
@@ -442,6 +481,8 @@ func _open_trap_screen() -> void:
 	if trap_row_button:
 		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta("style_selected"))
 	
+	# ★開く瞬間に visible = true にしてから、フェード＋スライドで見せる
+	panel.visible = true
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	# キューブと浮遊中の粒子を隠す（インベントリーバーは常に表示したままにする）
@@ -476,3 +517,7 @@ func _close_trap_screen() -> void:
 	tween.set_ease(Tween.EASE_IN)
 	tween.tween_property(panel, "position:y", CLOSED_Y_OFFSET, ANIM_DURATION)
 	tween.tween_property(panel, "modulate:a", 0.0, ANIM_DURATION)
+	
+	# ★フェードアウトが終わってから visible = false にする
+	# （フェード中に visible=false にすると tween が動く前に消えてしまうため）
+	tween.chain().tween_callback(func(): panel.visible = false)
