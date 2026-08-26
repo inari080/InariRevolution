@@ -10,6 +10,7 @@ class ElementItem:
 	var is_attracted: bool = false
 	var lifetime: float = 0.0
 	var max_lifetime: float = 0.0
+	var age: float = 0.0 # ★生まれてからの経過時間（グループ等で寿命が止まっていても常に増え続ける）
 	
 	var has_bounced: bool = false
 	var bounce_timer: float = 0.0
@@ -156,7 +157,7 @@ func _process(delta: float) -> void:
 			var distance = to_b.length()
 			
 			if distance < 30.0 and item_a.name != item_b.name:
-				if item_a.lifetime > 0.3 and item_b.lifetime > 0.3 and randf() < 0.1:
+				if item_a.age > 0.3 and item_b.age > 0.3 and randf() < 0.1:
 					var mid_pos = item_a.position + (to_b / 2)
 					create_chemical_spark(mid_pos)
 			
@@ -241,6 +242,7 @@ func _process(delta: float) -> void:
 		
 		if not life_paused:
 			item.lifetime += delta
+		item.age += delta # ★吸い寄せ解禁などの判定用に、寿命が止まっていても常に加算
 		
 		# ★寿命を迎えて粒子が消滅したときのペナルティ処理
 		if item.lifetime >= item.max_lifetime:
@@ -262,7 +264,7 @@ func _process(delta: float) -> void:
 		
 		var dist_to_mouse = item.position.distance_to(mouse_pos)
 		
-		if item.lifetime > 0.3:
+		if item.age > 0.3:
 			if mouse_interaction_enabled and dist_to_mouse < ATTRACT_RADIUS:
 				item.is_attracted = true
 			else:
