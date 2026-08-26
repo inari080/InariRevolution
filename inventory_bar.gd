@@ -176,10 +176,15 @@ func _reposition_bar() -> void:
 	if not bar_panel:
 		return
 	var vp_size: Vector2 = get_viewport_rect().size
+	
+	# 左にずらすピクセル数（好みに合わせて数値を調整してください）
+	var offset_left: float = 95.0 
+	
 	bar_panel.position = Vector2(
-		(vp_size.x - bar_panel.size.x) / 2.0,
+		((vp_size.x - bar_panel.size.x) / 2.0) - offset_left, # ここで引き算する
 		vp_size.y - bar_panel.size.y - BAR_BOTTOM_MARGIN
 	)
+
 
 # 空きスロットに1個追加する。成功したらtrue、満杯ならfalseを返す。
 func add_item(type_name: String) -> bool:
