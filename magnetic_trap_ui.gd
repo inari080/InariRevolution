@@ -98,7 +98,7 @@ class TrapSlot:
 		add_child(icon_label)
 		
 				# （_init 関数の count_label 追加処理の直後から置き換えてください）
-		add_child(count_label)
+		count_label = Label.new()
 	
 	# ❌ 古いローカルの static func _visual_for() と内部の match 文は完全に削除しました。
 	
