@@ -19,6 +19,8 @@ class ElementItem:
 	var is_grouped: bool = false
 	var ungroup_timer: float = 0.0 # ★グループ範囲から外れてからの経過時間（1秒でグループ解除）
 	var photon_bonus_cooldown: float = 0.0 # ★反発による光子ボーナスの連発を防ぐクールダウン
+	var was_repelling: bool = false # ★直前まで反発状態だったか（1反発イベントにつき1回だけ抽選するため）
+	var repelling_now: bool = false # ★今フレームの反発状態（内部スクラッチ用）
 	
 	# ★【追加】クォーク3個1組の合体判定用：近くにクォークが2個以上いる状態が続いた時間
 	var quark_group_time: float = 0.0
@@ -28,6 +30,11 @@ var elements: Array[ElementItem] = []
 
 # ★【追加】磁気トラップ画面が開いている間はマウスによる吸い寄せ・回収を止める
 var mouse_interaction_enabled: bool = true
+
+# ★【追加】反発による光子ボーナスの全体クールダウン（グループ全体で共有）
+# ペアごとのクールダウンだけだと、ペアの数が多いグループでは
+# 「どれかのペアは必ず当たる」状態になってしまうため、これで頻度に上限をかける
+var global_photon_bonus_cooldown: float = 0.0
 
 const ATTRACT_RADIUS: float = 150.0
 const FLY_SPEED: float = 800.0
@@ -93,6 +100,9 @@ func _process(delta: float) -> void:
 	for item in elements:
 		item.close_particles.clear()
 		item.photon_bonus_cooldown = max(0.0, item.photon_bonus_cooldown - delta) # ★光子ボーナスのクールダウン更新
+		item.repelling_now = false # ★このフレームの反発状態をいったんリセット
+	
+	global_photon_bonus_cooldown = max(0.0, global_photon_bonus_cooldown - delta) # ★光子ボーナスの全体クールダウン更新
 		
 	for i in range(elements.size()):
 		var item_a = elements[i]
@@ -178,23 +188,36 @@ func _process(delta: float) -> void:
 					item_a.velocity += direction * repel_force * 60.0 * delta
 					item_b.velocity -= direction * repel_force * 60.0 * delta
 					
-					# ★【変更】反発が起きた瞬間、クォークか電子どうしの反発の時だけ、
-					#   5%の確率でご褒美として光子が1個生まれる（陽子が絡む反発では出さない）
-					var a_is_qe = item_a.name == "Quark" or item_a.name == "Electron"
-					var b_is_qe = item_b.name == "Quark" or item_b.name == "Electron"
-					var bonus_eligible = a_is_qe and b_is_qe
+					# ★【修正】「反発している間ずっと毎フレーム抽選」だと、数十フレームのうちに
+					# ほぼ確実に成功してしまい実質「反発したら必ず光子が生まれる」状態になっていた。
+					# → 反発イベントが「新しく始まった瞬間」だけ1回だけ抽選するように変更。
+					# 反発が続いている間は再抽選せず、一度止まってから再度反発が始まった時だけ
+					# また抽選のチャンスが来る。
+					var is_new_repel_event = not item_a.was_repelling and not item_b.was_repelling
+					item_a.repelling_now = true
+					item_b.repelling_now = true
 					
-					if bonus_eligible and item_a.photon_bonus_cooldown <= 0.0 and item_b.photon_bonus_cooldown <= 0.0 and randf() < 0.05:
-						var mid_pos_repel = item_a.position + (to_b / 2)
-						_create_and_register_element("Photon", mid_pos_repel)
-						item_a.photon_bonus_cooldown = 3.0
-						item_b.photon_bonus_cooldown = 3.0
+					if is_new_repel_event:
+						# クォークか電子どうしの反発の時だけ、5%の確率でご褒美として光子が1個生まれる
+						# （陽子が絡む反発では出さない）
+						var a_is_qe = item_a.name == "Quark" or item_a.name == "Electron"
+						var b_is_qe = item_b.name == "Quark" or item_b.name == "Electron"
+						var bonus_eligible = a_is_qe and b_is_qe
+						
+						if bonus_eligible and global_photon_bonus_cooldown <= 0.0 and randf() < 0.05:
+							var mid_pos_repel = item_a.position + (to_b / 2)
+							_create_and_register_element("Photon", mid_pos_repel)
+							global_photon_bonus_cooldown = 4.0 # ★次に光子が生まれるまで最低4秒は空ける
 				else:
 					if item_a.sprite and item_a.stable_time < 3.0: item_a.sprite.modulate = item_a.color
 					if item_b.sprite and item_b.stable_time < 3.0: item_b.sprite.modulate = item_b.color
 					
 					item_a.velocity += direction * base_force * 60.0 * delta
 					item_b.velocity -= direction * base_force * 60.0 * delta
+
+	# ★次フレームで「反発が新しく始まった瞬間」を判定できるよう、今フレームの反発状態を記録しておく
+	for item in elements:
+		item.was_repelling = item.repelling_now
 
 	# --- 3. 通常の移動・壁バウンド・マウス吸い込み処理 ---
 	const PAIR_STILL_SPEED: float = 6.0 # ★ペア(2個1組)がこの速さを下回ったら「ほぼ止まった」とみなす
