@@ -112,6 +112,25 @@ class InventorySlot:
 		set_drag_preview(preview)
 		
 		return data
+	
+	# ★【追加】磁気トラップの粒子インベントリーからのドラッグを、
+	# このスロットが空いている時だけ受け入れる
+	func _can_drop_data(_at_position: Vector2, data) -> bool:
+		if not is_empty():
+			return false
+		return typeof(data) == TYPE_DICTIONARY and data.has("particle_type")
+	
+	func _drop_data(_at_position: Vector2, data) -> void:
+		if not (typeof(data) == TYPE_DICTIONARY and data.has("particle_type")):
+			return
+		if not is_empty():
+			return
+		
+		set_item(data["particle_type"])
+		
+		# 移動元が磁気トラップのスタックスロットなら、そちらを1個減らす
+		if data.has("source_trap_slot") and is_instance_valid(data["source_trap_slot"]):
+			data["source_trap_slot"].remove_one()
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

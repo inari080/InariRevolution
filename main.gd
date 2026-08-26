@@ -45,6 +45,9 @@ const tex_electron = preload("res://electron.png")
 const tex_photon = preload("res://photon.png")
 
 func _ready() -> void:
+	# ★【追加】磁気トラップ画面を開いた時に、遊び場側から粒子を隠せるようにする
+	add_to_group("game_field")
+	
 	# このノード(Main)自身の当たり判定を画面全体に広げる
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	
@@ -192,6 +195,13 @@ func _process(delta: float) -> void:
 				if inventory and inventory.has_method("add_item"):
 					stored = inventory.add_item(item.name)
 				
+				# ★【追加】通常のインベントリーが満杯だった場合、
+				# 磁気トラップの粒子インベントリー（1枠10個までスタック）へ回す
+				if not stored:
+					var trap = get_tree().get_first_node_in_group("magnetic_trap_ui")
+					if trap and trap.has_method("add_item"):
+						stored = trap.add_item(item.name)
+				
 				if stored:
 					var collect_pos = item.position
 					if item.sprite:
@@ -210,7 +220,7 @@ func _process(delta: float) -> void:
 						# ※ここに将来、次の創造レシピ（水素の誕生など）の処理を入れます
 						get_tree().call_group("cubes", "revive") # 一旦ループのためにキューブを戻します
 					continue
-				# インベントリーが満杯 → 回収しない（何もせず、そのまま漂い続ける）
+				# 通常のインベントリーも磁気トラップも満杯 → 回収しない（そのまま漂い続ける）
 		else:
 			if item.position.x < radius:
 				item.position.x = radius
@@ -254,6 +264,14 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	pass
+
+# ★【追加】磁気トラップ画面（別画面切り替え）を開いている間、
+# 浮遊中の粒子スプライトを隠す/戻すための切り替え関数。
+# キューブ自体は magnetic_trap_ui.gd 側から call_group("cubes","hide"/"show") で制御する。
+func set_particles_visible(v: bool) -> void:
+	for item in elements:
+		if item.sprite:
+			item.sprite.visible = v
 
 # countにはGlowingCubeから渡された「壊れた瞬間の到達HP(round_capacity)」が入る
 # HPが低いほど少なく、高いほど多く粒子が出るように比例配分する
