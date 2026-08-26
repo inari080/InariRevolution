@@ -333,9 +333,12 @@ func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: Stri
 
 # ★【追加】他ノード（SingulallityButton / MicrossopicLawUI など）が
 #   このサイドバーの土台に自分の行を追加するための公開関数
-func register_sidebar_row(label_text: String, icon_text: String, icon_color: Color) -> Button:
+# 変更後（at_index を追加。デフォルト -1 は今まで通り末尾追加）
+func register_sidebar_row(label_text: String, icon_text: String, icon_color: Color, at_index: int = -1) -> Button:
 	var btn := _add_sidebar_row(rows_vbox, label_text, icon_text, icon_color)
-	_reposition_ui() # ★行が増えた分、帯の高さを再計算する
+	if at_index >= 0:
+		rows_vbox.move_child(btn, at_index)
+	_reposition_ui()
 	return btn
 
 # --------------------------------------------------------------

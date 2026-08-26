@@ -29,7 +29,7 @@ func _ready() -> void:
 		push_warning("SingulallityButton: magnetic_trap_ui が見つかりません。シーンツリーの順番を確認してください。")
 		return
 	
-	row_button = trap_ui.register_sidebar_row("特異点", "◉", Color(0.55, 0.35, 0.85))
+	row_button = trap_ui.register_sidebar_row("特異点", "◉", Color(0.55, 0.35, 0.85), 0)
 	row_button.pressed.connect(_on_pressed)
 	
 	# ★最初はホーム画面（黒い遊び場）がアクティブなので、選択状態にしておく
