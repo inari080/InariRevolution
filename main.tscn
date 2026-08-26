@@ -6,6 +6,9 @@
 [ext_resource type="Script" uid="uid://psaap8prw88o" path="res://inventory_bar.gd" id="4_1bvp3"]
 [ext_resource type="Script" uid="uid://cap1mpvx3r7dx" path="res://SingulalityButton.gd" id="5_7mycd"]
 [ext_resource type="Script" uid="uid://bed2ol3doxjwb" path="res://MicroscopicLawUI.gd" id="6_272bh"]
+[ext_resource type="Script" uid="uid://b218jvppwfrsi" path="res://game_logic.gd" id="7_272bh"]
+[ext_resource type="Script" uid="uid://bjwhmqy0kirpc" path="res://particle_pool.gd" id="8_5vw27"]
+[ext_resource type="Script" uid="uid://e8nh0earv2a4" path="res://ui_event_handler.gd" id="8_kek77"]
 
 [sub_resource type="Environment" id="Environment_h3515"]
 background_mode = 3
@@ -14,7 +17,7 @@ glow_enabled = true
 [sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_h3515"]
 blend_mode = 1
 
-[node name="main" type="Control" unique_id=157589346]
+[node name="game" type="Control" unique_id=157589346]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -68,3 +71,27 @@ anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
 script = ExtResource("6_272bh")
+
+[node name="GameLogic" type="Control" parent="." unique_id=441249296]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("7_272bh")
+
+[node name="UIEventHandler" type="Control" parent="." unique_id=767059118]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("8_kek77")
+
+[node name="ParticlePool" type="Control" parent="." unique_id=267867907]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("8_5vw27")
+
+[node name="main" type="Control" parent="." unique_id=525544899]
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_h2yge")
