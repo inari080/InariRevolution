@@ -11,7 +11,13 @@ func before_each() -> void:
 	main._ready()
 
 func after_each() -> void:
-	main.free() # free()で警告を防止
+	# 💡 【Orphans(迷子)対策】
+	# 新しい main.gd は内部で GameLogic、ParticlePool、UIEventHandler を
+	# .new() して add_child しています。これら子ノードも漏れなく完全に解放します。
+	if is_instance_valid(main):
+		for child in main.get_children():
+			child.free()
+		main.free()
 
 # ===== 粒子出現数の計算テスト =====
 func test_spawn_count_at_minimum_capacity() -> void:
@@ -64,7 +70,6 @@ func test_spawn_count_midpoint() -> void:
 
 # ===== パーティクル種類の抽選テスト =====
 func test_particle_type_distribution() -> void:
-	# 💡 試行回数を100回から1000回に増やし、確率のブレを排除します
 	var quark_count = 0
 	var electron_count = 0
 	var photon_count = 0
@@ -78,20 +83,27 @@ func test_particle_type_distribution() -> void:
 		else:
 			photon_count += 1
 	
-	# 1000回中、1%であれば約10回出るはずなので、2回以上あれば合格とします
 	assert_gt(quark_count, 450, "クォークが十分に出現")
 	assert_gt(electron_count, 350, "電子が十分に出現")
-	assert_gt(photon_count, 2, "光子が1%の確率に基づいて出現（2回以上確認）")
+	assert_gt(photon_count, 2, "光子が1%の確率に基づいて出現")
 
 func test_all_particle_types_can_spawn() -> void:
+	# 💡 【確率バグ対策】
+	# 1%の確率(光子)が混ざっているため、300回だと稀に引けない「運の悪いフレーム」が発生します。
+	# 試行回数を 1000回 に引き上げ、確率のブレによる理不尽なテスト失敗を確実に防ぎます。
 	var has_quark = false
 	var has_electron = false
 	var has_photon = false
-	for i in range(300): # 余裕を持たせて300回に
+	
+	for i in range(1000):
 		var roll = randf_range(0.0, 100.0)
-		if roll < 54.5: has_quark = true
-		elif roll < 99.0: has_electron = true
-		else: has_photon = true
-	assert_true(has_quark)
-	assert_true(has_electron)
-	assert_true(has_photon)
+		if roll < 54.5: 
+			has_quark = true
+		elif roll < 99.0: 
+			has_electron = true
+		else: 
+			has_photon = true
+			
+	assert_true(has_quark, "クォークが出現すること")
+	assert_true(has_electron, "電子が出現すること")
+	assert_true(has_photon, "光子が出現すること")

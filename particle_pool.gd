@@ -11,6 +11,34 @@ const SPAWN_COUNT_MAX: int = 8
 const STREAK_SIZE: float = 14.0
 const STREAK_DURATION: float = 0.35
 
+# --- 演出用パラメータ定数 ---
+const HDR_GLOW_MULTIPLIER: float = 4.0            # エフェクトがブルームに乗るための輝度増幅倍率
+const SPRITE_MODULATE_BRIGHTNESS: float = 3.0     # スプライトの標準輝度
+const PROTON_DISPLAY_SIZE: float = 64.0           # 陽子の表示サイズ
+const NORMAL_PARTICLE_DISPLAY_SIZE: float = 48.0  # 通常粒子の表示サイズ
+const INITIAL_SPEED_MIN: float = 80.0             # 生成時の最低初速
+const INITIAL_SPEED_MAX: float = 200.0            # 生成時の最高初速
+
+const SPARK_AMOUNT: int = 5                       # 結合火花の粒子数
+const SPARK_LIFETIME: float = 0.4                 # 結合火花の寿命
+const SPARK_EXPLOSIVENESS: float = 0.9            # 結合火花の爆発度
+const SPARK_VELOCITY_MIN: float = 30.0            # 結合火花の最小速度
+const SPARK_VELOCITY_MAX: float = 80.0            # 結合火花の最大速度
+const SPARK_BRIGHTNESS: float = 4.0               # 結合火花の輝度
+
+const BOUNCE_SPARK_AMOUNT: int = 6                # 壁反射エフェクトの粒子数
+const BOUNCE_SPARK_LIFETIME: float = 0.3          # 壁反射エフェクトの寿命
+const BOUNCE_SPARK_VELOCITY_MIN: float = 40.0     # 壁反射エフェクトの最小速度
+const BOUNCE_SPARK_VELOCITY_MAX: float = 110.0    # 壁反射エフェクトの最大速度
+const BOUNCE_SPARK_SCALE_MIN: float = 0.5         # 壁反射エフェクトの最小スケール
+const BOUNCE_SPARK_SCALE_MAX: float = 1.0         # 壁反射エフェクトの最大スケール
+
+const STREAK_SCALE_X: float = 1.6                 # 光の線の進行方向の引き伸ばし倍率
+const STREAK_SCALE_Y: float = 0.5                 # 光の線の横幅縮小倍率
+const STREAK_FINAL_SCALE: float = 0.1             # 光の線の消滅直前のしぼみサイズ
+const TWEEN_REVIVE_DURATION: float = 0.3          # キューブ復活のフェードイン秒数
+const TWEEN_RESET_DURATION: float = 0.2           # 内枠バーがリセットして消える秒数
+
 const tex_quark = preload("res://quark.png")
 const tex_electron = preload("res://electron.png")
 const tex_photon = preload("res://photon.png")
@@ -18,14 +46,12 @@ const tex_photon = preload("res://photon.png")
 var game_logic: GameLogic
 var parent_node: Node
 
-# 磁気トラップ画面などの開閉状態に連動するフラグ
 var mouse_interaction_enabled: bool = true
 
 func _init(p_game_logic: GameLogic, p_parent: Node) -> void:
 	game_logic = p_game_logic
 	parent_node = p_parent
 
-# 粒子生成（HPに応じた出現数調整）
 func spawn_elements(start_pos: Vector2, count: int) -> void:
 	var capacity: int = clampi(count, CAPACITY_MIN, CAPACITY_MAX)
 	var ratio: float = 0.0
@@ -61,32 +87,30 @@ func create_and_register_element(type_name: String, start_pos: Vector2) -> void:
 		"Quark":   type_tex = tex_quark
 		"Electron":type_tex = tex_electron
 		"Photon":  type_tex = tex_photon
-		"Proton":  type_tex = tex_quark # 陽子専用画像が用意できるまでクォークを流用
+		"Proton":  type_tex = tex_quark
 		_:         type_tex = tex_quark
 	
-	# ⭕ 共通クラス ParticleVisual から正しい色（ベースライン）を取得
 	var visual: Dictionary = ParticleVisual.visual_for(type_name)
 	
 	item.name = type_name
-	# ゲーム内の発光表現（HDR/ブルーム）に合わせるため輝度を増幅（RGB各値を4倍化、アルファは維持）
-	item.color = Color(visual["color"].r * 4.0, visual["color"].g * 4.0, visual["color"].b * 4.0, visual["color"].a)
+	item.color = Color(visual["color"].r * HDR_GLOW_MULTIPLIER, visual["color"].g * HDR_GLOW_MULTIPLIER, visual["color"].b * HDR_GLOW_MULTIPLIER, visual["color"].a)
 	
 	var sp = Sprite2D.new()
 	sp.texture = type_tex
 	sp.global_position = start_pos
-	sp.modulate = Color(3.0, 3.0, 3.0, 1.0)
+	sp.modulate = Color(SPRITE_MODULATE_BRIGHTNESS, SPRITE_MODULATE_BRIGHTNESS, SPRITE_MODULATE_BRIGHTNESS, 1.0)
 	
 	if sp.texture:
 		var tex_size = sp.texture.get_size()
 		if tex_size.x > 0 and tex_size.y > 0:
-			var target_size: float = 64.0 if type_name == "Proton" else 48.0
+			var target_size: float = PROTON_DISPLAY_SIZE if type_name == "Proton" else NORMAL_PARTICLE_DISPLAY_SIZE
 			sp.scale = Vector2(target_size / tex_size.x, target_size / tex_size.y)
 	
 	parent_node.add_child(sp)
 	item.sprite = sp
 	
 	var angle = randf() * TAU
-	var speed = randf_range(80.0, 200.0)
+	var speed = randf_range(INITIAL_SPEED_MIN, INITIAL_SPEED_MAX)
 	item.velocity = Vector2(cos(angle), sin(angle)) * speed
 	
 	game_logic.elements.append(item)
@@ -94,7 +118,6 @@ func create_and_register_element(type_name: String, start_pos: Vector2) -> void:
 func spawn_proton(center_pos: Vector2) -> void:
 	create_and_register_element("Proton", center_pos)
 
-# ★【追加統合】密着・合体時の火花エフェクト
 func create_chemical_spark(spark_position: Vector2) -> void:
 	if not mouse_interaction_enabled:
 		return
@@ -103,24 +126,23 @@ func create_chemical_spark(spark_position: Vector2) -> void:
 	spark.global_position = spark_position
 	spark.z_index = 1000
 	
-	spark.amount = 5
-	spark.lifetime = 0.4
+	spark.amount = SPARK_AMOUNT
+	spark.lifetime = SPARK_LIFETIME
 	spark.one_shot = true
-	spark.explosiveness = 0.9
+	spark.explosiveness = SPARK_EXPLOSIVENESS
 	
 	spark.direction = Vector2.ZERO
 	spark.gravity = Vector2.ZERO
-	spark.initial_velocity_min = 30.0
-	spark.initial_velocity_max = 80.0
+	spark.initial_velocity_min = SPARK_VELOCITY_MIN
+	spark.initial_velocity_max = SPARK_VELOCITY_MAX
 	
-	spark.modulate = Color(4.0, 4.0, 4.0, 1.0) 
+	spark.modulate = Color(SPARK_BRIGHTNESS, SPARK_BRIGHTNESS, SPARK_BRIGHTNESS, 1.0) 
 	
 	parent_node.add_child(spark)
 	
-	var timer = parent_node.get_tree().create_timer(0.5)
+	var timer = parent_node.get_tree().create_timer(SPARK_LIFETIME + 0.1)
 	timer.timeout.connect(spark.queue_free)
 
-# ★【追加統合】壁反射時のエフェクト
 func create_wall_bounce_effect(bounce_position: Vector2, particle_color: Color) -> void:
 	if not mouse_interaction_enabled:
 		return
@@ -128,27 +150,26 @@ func create_wall_bounce_effect(bounce_position: Vector2, particle_color: Color) 
 	var spark = CPUParticles2D.new()
 	spark.global_position = bounce_position
 	
-	spark.amount = 6
-	spark.lifetime = 0.3
+	spark.amount = BOUNCE_SPARK_AMOUNT
+	spark.lifetime = BOUNCE_SPARK_LIFETIME
 	spark.one_shot = true
 	spark.explosiveness = 1.0
 	
 	spark.direction = Vector2.ZERO
 	spark.spread = 180.0
 	spark.gravity = Vector2.ZERO
-	spark.initial_velocity_min = 40.0
-	spark.initial_velocity_max = 110.0
-	spark.scale_amount_min = 0.5
-	spark.scale_amount_max = 1.0
+	spark.initial_velocity_min = BOUNCE_SPARK_VELOCITY_MIN
+	spark.initial_velocity_max = BOUNCE_SPARK_VELOCITY_MAX
+	spark.scale_amount_min = BOUNCE_SPARK_SCALE_MIN
+	spark.scale_amount_max = BOUNCE_SPARK_SCALE_MAX
 	
 	spark.modulate = particle_color
 	
 	parent_node.add_child(spark)
 	
-	var timer = parent_node.get_tree().create_timer(0.4)
+	var timer = parent_node.get_tree().create_timer(BOUNCE_SPARK_LIFETIME + 0.1)
 	timer.timeout.connect(spark.queue_free)
 
-# ★【追加統合】キューブへ吸い込まれる光の線の演出
 func create_repair_streak(from_pos: Vector2) -> void:
 	var cubes = parent_node.get_tree().get_nodes_in_group("cubes")
 	if cubes.is_empty():
@@ -161,7 +182,7 @@ func create_repair_streak(from_pos: Vector2) -> void:
 	var target_pos: Vector2 = target_cube.global_position + (target_cube.size / 2)
 	
 	var streak = ColorRect.new()
-	streak.color = Color(3.0, 3.0, 3.0, 1.0)
+	streak.color = Color(SPRITE_MODULATE_BRIGHTNESS, SPRITE_MODULATE_BRIGHTNESS, SPRITE_MODULATE_BRIGHTNESS, 1.0)
 	streak.size = Vector2(STREAK_SIZE, STREAK_SIZE)
 	streak.pivot_offset = streak.size / 2
 	streak.global_position = from_pos - streak.size / 2
@@ -170,7 +191,7 @@ func create_repair_streak(from_pos: Vector2) -> void:
 	
 	var to_target = target_pos - from_pos
 	streak.rotation = to_target.angle()
-	streak.scale = Vector2(1.6, 0.5)
+	streak.scale = Vector2(STREAK_SCALE_X, STREAK_SCALE_Y)
 	
 	var tween = parent_node.create_tween()
 	tween.set_parallel(true)
@@ -178,7 +199,7 @@ func create_repair_streak(from_pos: Vector2) -> void:
 	tween.tween_property(streak, "global_position", target_pos - streak.size / 2, STREAK_DURATION)\
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	
-	tween.tween_property(streak, "scale", Vector2(0.1, 0.1), STREAK_DURATION)\
+	tween.tween_property(streak, "scale", Vector2(STREAK_FINAL_SCALE, STREAK_FINAL_SCALE), STREAK_DURATION)\
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
 	
 	tween.chain().tween_callback(streak.queue_free)
