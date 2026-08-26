@@ -12,9 +12,16 @@ extends Control
 #   ドロップすると、1個だけそちらへ移動できる
 #   （受け取り側は inventory_bar.gd の InventorySlot._drop_data() 実装済み）
 #
+# ★【変更】特異点ボタンは SingulallityButton.gd へ移動しました。
+#   このスクリプトはサイドバーの「土台」（右端の帯・行を積むVBoxContainer）を
+#   引き続き持っており、SingulallityButton / MicrossopicLawUI などの
+#   別ノードが register_sidebar_row() を呼ぶことで、同じ土台に行を追加できます。
+#
 # 使い方:
 #   main.gd が付いているノードの「子」として、このスクリプトを付けた
 #   新しい Control ノードを追加する（main.gd のノード自体には付けないこと！）
+#   ★シーンツリー上で、SingulallityButton や MicrossopicLawUI より
+#     「上（先）」に置くこと（土台を先に作る必要があるため）。
 #
 # ★位置はアンカーではなく、実際のビューポートサイズから直接計算する
 #   ことで、親ノードのサイズ確定タイミングに左右されないようにしている。
@@ -24,11 +31,11 @@ extends Control
 # ★ main.gd の RESERVED_RIGHT_WIDTH と必ず同じ値にすること
 #   （この幅ぶん、main.gd側でキューブ・粒子の移動範囲が狭められる）
 const SIDEBAR_WIDTH: float = 190.0
-const SIDEBAR_TOP_MARGIN: float = 0.0 # ★特異点ボタン上の余白を無くす
-const ROW_HEIGHT: float = 60.0 # ★少し大きく
-const ICON_CIRCLE_SIZE: float = 36.0 # ★少し大きく
+const SIDEBAR_TOP_MARGIN: float = 0.0 # ★一番上のボタン上の余白を無くす
+const ROW_HEIGHT: float = 60.0
+const ICON_CIRCLE_SIZE: float = 36.0
 const SIDEBAR_ROW_GAP: float = 0.0 # ★ボタン同士の隙間を無くす
-const SIDEBAR_ROW_PADDING: float = 0.0 # ★余白ゼロ＝ボタンが帯の端（画面右端）まで埋める
+const SIDEBAR_ROW_PADDING: float = 0.0 # ★余白ゼロ＝ボタンが帯の端まで埋める
 
 # 粒子インベントリー（グリッド画面）
 const GRID_COLUMNS: int = 6
@@ -44,8 +51,8 @@ var is_open: bool = false
 
 var reserved_column: Panel
 var sidebar_bg: Panel
+var rows_vbox: VBoxContainer # ★【追加】他ノードがここに行を足せるよう公開する
 var trap_row_button: Button
-var singularity_row_button: Button
 
 var panel: Panel
 var trap_slots: Array = []
@@ -59,8 +66,6 @@ var panel_height: float = 0.0
 class TrapSlot:
 	extends Panel
 	
-	# ★TrapSlotは内部クラスのため外側の定数(STACK_CAP)に直接アクセスできない。
-	#   ここでも同じ値を持たせておく（外側のSTACK_CAPを変えたらこちらも合わせて変更）
 	const CAP: int = 10
 	
 	var slot_type: String = ""
@@ -138,7 +143,6 @@ class TrapSlot:
 		icon_label.add_theme_color_override("font_color", visual["color"])
 		count_label.text = "x" + str(count)
 	
-	# 1個追加を試みる。成功したらtrue。
 	func add_one(type_name: String, cap: int) -> bool:
 		if slot_type == "":
 			slot_type = type_name
@@ -151,7 +155,6 @@ class TrapSlot:
 			return true
 		return false
 	
-	# 1個取り出す（ドラッグで他インベントリーへ移動した時などに呼ぶ）
 	func remove_one() -> void:
 		if count <= 0:
 			return
@@ -167,7 +170,6 @@ class TrapSlot:
 	func has_room(type_name: String, cap: int) -> bool:
 		return is_empty() or (slot_type == type_name and count < cap)
 	
-	# ドラッグ開始：中身があるスロットのみドラッグ可能（1個ぶんだけ運ぶ）
 	func _get_drag_data(_at_position: Vector2) -> Variant:
 		if slot_type == "":
 			return null
@@ -183,8 +185,6 @@ class TrapSlot:
 		
 		return data
 	
-	# ★【追加】インベントリーバー（下部の粒子バー）や他の磁気トラップスロットからの
-	# ドラッグを受け入れる：空きがある（または同じ種類でスタックに余裕がある）時だけOK
 	func _can_drop_data(_at_position: Vector2, data) -> bool:
 		if typeof(data) != TYPE_DICTIONARY or not data.has("particle_type"):
 			return false
@@ -196,63 +196,50 @@ class TrapSlot:
 		if not add_one(data["particle_type"], CAP):
 			return
 		
-		# 移動元がインベントリーバーのスロットなら、そちらを空にする
 		if data.has("source_slot") and is_instance_valid(data["source_slot"]):
 			data["source_slot"].clear()
-		# 移動元が別の磁気トラップスロットなら、そちらを1個減らす
 		elif data.has("source_trap_slot") and is_instance_valid(data["source_trap_slot"]) and data["source_trap_slot"] != self:
 			data["source_trap_slot"].remove_one()
 
 func _ready() -> void:
-	# 自分自身はマウスを奪わない（子のボタン/パネルだけが反応する）
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	add_to_group("magnetic_trap_ui")
+	add_to_group("screen_ui") # ★【追加】他の画面（特異点・ミクロの法則）と排他制御するためのグループ
 	
 	_build_panel()
 	_build_sidebar()
 	
-	# ★初期状態では磁気トラップ画面は閉じている＝「特異点」タブがアクティブ
-	_update_active_tab("singularity")
-	
-	# アンカーに頼らず、実際のビューポートサイズを見て絶対座標で配置する
 	_reposition_ui()
 	
-	# ウィンドウサイズが変わった時も追従させる
 	get_viewport().size_changed.connect(_reposition_ui)
 
 # --------------------------------------------------------------
-# サイドバー（右端に張り付く縦積みリスト。今は磁気トラップ1行だけ）
+# サイドバー（右端に張り付く縦積みリストの「土台」）
+# ★自分の行（磁気トラップ）だけ追加する。他ノードは register_sidebar_row() を使う。
 # --------------------------------------------------------------
 func _build_sidebar() -> void:
-	# 画面右端を「上から下まで」確保する背景（黒い遊び場と区別する専用エリア）
 	reserved_column = Panel.new()
 	reserved_column.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var column_style := StyleBoxFlat.new()
-	column_style.bg_color = Color(0.11, 0.11, 0.13, 1.0) # 黒(遊び場)とは少し区別できる濃いグレー
+	column_style.bg_color = Color(0.11, 0.11, 0.13, 1.0)
 	column_style.border_width_left = 2
-	column_style.border_color = Color(1.0, 1.0, 1.0, 0.06) # 境界線をうっすら
+	column_style.border_color = Color(1.0, 1.0, 1.0, 0.06)
 	reserved_column.add_theme_stylebox_override("panel", column_style)
 	
 	add_child(reserved_column)
 	
-	# タブの行を積むコンテナ（帯の上部に配置。下は今後タブが増えるまで空のまま）
-	# ★行と行の間に隙間(SIDEBAR_ROW_GAP)、帯の内側に余白(SIDEBAR_ROW_PADDING)を持たせて
-	#   四角い枠がそれぞれ独立したボタンに見えるようにする
-	var row_count := 2
-	var sidebar_content_height: float = ROW_HEIGHT * row_count + SIDEBAR_ROW_GAP * (row_count - 1) + SIDEBAR_ROW_PADDING * 2
-	
 	sidebar_bg = Panel.new()
-	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
-	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
+	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
+	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
 	sidebar_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.13, 0.13, 0.15, 0.0) # 背景は reserved_column に任せるので透明
+	bg_style.bg_color = Color(0.13, 0.13, 0.15, 0.0)
 	sidebar_bg.add_theme_stylebox_override("panel", bg_style)
 	
-	var rows_vbox := VBoxContainer.new()
+	rows_vbox = VBoxContainer.new()
 	rows_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rows_vbox.offset_left = SIDEBAR_ROW_PADDING
 	rows_vbox.offset_right = -SIDEBAR_ROW_PADDING
@@ -261,39 +248,30 @@ func _build_sidebar() -> void:
 	rows_vbox.add_theme_constant_override("separation", SIDEBAR_ROW_GAP)
 	sidebar_bg.add_child(rows_vbox)
 	
-	# ★【追加】一番上：黒い空間（遊び場）に戻るボタン
-	#singularity_row_button = _add_sidebar_row(rows_vbox, "特異点", "◉", Color(0.55, 0.35, 0.85))
-	#singularity_row_button.pressed.connect(_on_singularity_pressed)
-	
 	trap_row_button = _add_sidebar_row(rows_vbox, "磁気トラップ", "⚛", Color(0.3, 0.75, 1.0))
 	trap_row_button.pressed.connect(_on_tab_pressed)
 	
 	add_child(sidebar_bg)
 
 # サイドバーに1行追加する（アイコン丸バッジ＋テキスト）。押せるButtonを返す。
-# ★スタイル(通常時/選択時)はボタン自身にメタデータとして保持する（複数行あっても混ざらないように）
-# ★四角い枠＋ホバー時に icon_color で光る演出つき
 func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: String, icon_color: Color) -> Button:
 	var row := Button.new()
 	row.custom_minimum_size = Vector2(0, ROW_HEIGHT)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.focus_mode = Control.FOCUS_NONE
-	row.flat = false # ★falseにしないと通常時のスタイル(枠線)が描画されない
+	row.flat = false
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# ★枠線・光彩は無し。角丸も無し＝帯いっぱいに埋まる四角いボタン。
 	var style_normal := StyleBoxFlat.new()
 	style_normal.bg_color = Color(0.15, 0.15, 0.17, 0.9)
 	style_normal.set_border_width_all(0)
 	style_normal.set_corner_radius_all(0)
 	
-	# ★ホバー時：背景を少し明るくするだけ
 	var style_hover := StyleBoxFlat.new()
 	style_hover.bg_color = Color(0.20, 0.20, 0.23, 0.95)
 	style_hover.set_border_width_all(0)
 	style_hover.set_corner_radius_all(0)
 	
-	# ★選択時（＝現在開いているタブ）：発光なし。背景色を明るくするだけで区別する。
 	var style_selected := StyleBoxFlat.new()
 	style_selected.bg_color = Color(0.26, 0.26, 0.30, 1.0)
 	style_selected.set_border_width_all(0)
@@ -304,7 +282,6 @@ func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: Stri
 	row.add_theme_stylebox_override("pressed", style_hover)
 	row.add_theme_stylebox_override("focus", style_normal)
 	
-	# ★このボタン専用のスタイルとして保持（他の行と混ざらないようにmetaに乗せる）
 	row.set_meta("style_normal", style_normal)
 	row.set_meta("style_selected", style_selected)
 	
@@ -354,16 +331,22 @@ func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: Stri
 	parent.add_child(row)
 	return row
 
+# ★【追加】他ノード（SingulallityButton / MicrossopicLawUI など）が
+#   このサイドバーの土台に自分の行を追加するための公開関数
+func register_sidebar_row(label_text: String, icon_text: String, icon_color: Color) -> Button:
+	var btn := _add_sidebar_row(rows_vbox, label_text, icon_text, icon_color)
+	_reposition_ui() # ★行が増えた分、帯の高さを再計算する
+	return btn
+
 # --------------------------------------------------------------
 # 粒子インベントリー画面（別画面切り替え・グリッド式・スタック対応）
-# 画面全体（右のサイドバー帯を除く）を覆う「画面切り替え」として表示する
 # --------------------------------------------------------------
 func _build_panel() -> void:
 	var grid_width: float = GRID_COLUMNS * GRID_SLOT_SIZE + (GRID_COLUMNS + 1) * GRID_SLOT_SPACING
 	
 	panel = Panel.new()
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.modulate.a = 0.0 # 閉じている間は透明にしておく（開閉はフェード＋わずかな位置移動）
+	panel.modulate.a = 0.0
 	
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.06, 0.08, 0.99)
@@ -382,7 +365,6 @@ func _build_panel() -> void:
 	vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 	margin.add_child(vbox)
 	
-	# ヘッダー行（タイトル ＋ 戻るボタン）
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 16)
 	
@@ -407,7 +389,6 @@ func _build_panel() -> void:
 	vbox.add_child(header)
 	vbox.add_child(HSeparator.new())
 	
-	# グリッド本体（中央寄せ）
 	var grid_center := CenterContainer.new()
 	grid_center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	grid_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -429,10 +410,6 @@ func _build_panel() -> void:
 	
 	add_child(panel)
 
-# --------------------------------------------------------------
-# main.gd から呼ばれる：通常インベントリーが満杯の時のフォールバック保管先
-# 既存の同じ種類でスタックに空きがあるスロットを優先し、無ければ空きスロットへ。
-# --------------------------------------------------------------
 func add_item(type_name: String) -> bool:
 	for slot in trap_slots:
 		if slot.slot_type == type_name and slot.count < STACK_CAP:
@@ -440,11 +417,10 @@ func add_item(type_name: String) -> bool:
 	for slot in trap_slots:
 		if slot.is_empty():
 			return slot.add_one(type_name, STACK_CAP)
-	return false # 粒子インベントリーも満杯
+	return false
 
 # --------------------------------------------------------------
 # 実際のビューポートサイズから絶対座標を計算して配置する
-# サイドバー＝画面右上固定。パネル＝画面全体（サイドバー帯を除く）を覆う。
 # --------------------------------------------------------------
 func _reposition_ui() -> void:
 	var vp_size: Vector2 = get_viewport_rect().size
@@ -457,9 +433,15 @@ func _reposition_ui() -> void:
 		reserved_column.size = Vector2(SIDEBAR_WIDTH, vp_size.y)
 	
 	if sidebar_bg:
+		# ★【変更】行数を rows_vbox の実際の子ノード数から動的に計算する
+		#   （他ノードが register_sidebar_row() で行を足すたびに再計算される）
+		var row_count: int = rows_vbox.get_child_count() if rows_vbox else 1
+		var sidebar_content_height: float = ROW_HEIGHT * row_count + SIDEBAR_ROW_GAP * max(row_count - 1, 0) + SIDEBAR_ROW_PADDING * 2
+		sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
+		sidebar_bg.size = Vector2(SIDEBAR_WIDTH, sidebar_content_height)
 		sidebar_bg.position = Vector2(sidebar_x, sidebar_y)
 	
-	panel_width = sidebar_x # 画面左端からサイドバー帯の手前まで
+	panel_width = sidebar_x
 	panel_height = vp_size.y
 	
 	if panel:
@@ -468,16 +450,10 @@ func _reposition_ui() -> void:
 		panel.position.y = 0.0 if is_open else CLOSED_Y_OFFSET
 		panel.modulate.a = 1.0 if is_open else 0.0
 		panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_open else Control.MOUSE_FILTER_IGNORE
-		# ★重要：閉じている間は visible = false にして完全に入力判定から外す。
-		# modulate.a=0 と mouse_filter=IGNORE だけでは、パネル内の子要素
-		# （グリッドスロットなど、それぞれ独自の mouse_filter=STOP を持つ）が
-		# 透明なまま黒い遊び場のクリックを裏で奪ってしまう。
 		panel.visible = is_open
 
 # --------------------------------------------------------------
 # 開閉トグル（画面切り替え）
-# 開く: キューブ・浮遊中の粒子を隠す（インベントリーバーはそのまま表示し続ける）
-# 閉じる: すべて元に戻す
 # --------------------------------------------------------------
 func _on_tab_pressed() -> void:
 	if is_open:
@@ -485,30 +461,22 @@ func _on_tab_pressed() -> void:
 	else:
 		_open_trap_screen()
 
-# ★【追加】サイドバー最上段の「特異点」ボタン：黒い空間（遊び場）に戻る専用
-func _on_singularity_pressed() -> void:
-	if is_open:
-		_close_trap_screen()
-
-# ★現在開いているタブだけを白く光らせ、他は通常表示に戻す
-func _update_active_tab(active: String) -> void:
+func _set_trap_row_active(active: bool) -> void:
 	if trap_row_button:
-		var key := "style_selected" if active == "trap" else "style_normal"
+		var key := "style_selected" if active else "style_normal"
 		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta(key))
-	if singularity_row_button:
-		var key2 := "style_selected" if active == "singularity" else "style_normal"
-		singularity_row_button.add_theme_stylebox_override("normal", singularity_row_button.get_meta(key2))
 
 func _open_trap_screen() -> void:
 	is_open = true
 	
-	_update_active_tab("trap")
+	_set_trap_row_active(true)
 	
-	# ★開く瞬間に visible = true にしてから、フェード＋スライドで見せる
+	# ★【追加】他の画面（特異点・ミクロの法則）が開いていれば閉じてもらう
+	get_tree().call_group("screen_ui", "external_close", self)
+	
 	panel.visible = true
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# キューブと浮遊中の粒子を隠す（インベントリーバーは常に表示したままにする）
 	get_tree().call_group("cubes", "hide")
 	var field = get_tree().get_first_node_in_group("game_field")
 	if field and field.has_method("set_particles_visible"):
@@ -524,7 +492,7 @@ func _open_trap_screen() -> void:
 func _close_trap_screen() -> void:
 	is_open = false
 	
-	_update_active_tab("singularity")
+	_set_trap_row_active(false)
 	
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
@@ -540,6 +508,10 @@ func _close_trap_screen() -> void:
 	tween.tween_property(panel, "position:y", CLOSED_Y_OFFSET, ANIM_DURATION)
 	tween.tween_property(panel, "modulate:a", 0.0, ANIM_DURATION)
 	
-	# ★フェードアウトが終わってから visible = false にする
-	# （フェード中に visible=false にすると tween が動く前に消えてしまうため）
 	tween.chain().tween_callback(func(): panel.visible = false)
+
+# ★【追加】他の画面（特異点・ミクロの法則）が開かれた時に呼ばれる。
+#   自分が開いていれば閉じる。
+func external_close(requesting_node) -> void:
+	if requesting_node != self and is_open:
+		_close_trap_screen()

@@ -4,6 +4,8 @@
 [ext_resource type="Script" uid="uid://cfdm4fjhguxrn" path="res://main.gd" id="1_h2yge"]
 [ext_resource type="Script" uid="uid://dltql4qxulpmx" path="res://magnetic_trap_ui.gd" id="3_h2yge"]
 [ext_resource type="Script" uid="uid://psaap8prw88o" path="res://inventory_bar.gd" id="4_1bvp3"]
+[ext_resource type="Script" uid="uid://cap1mpvx3r7dx" path="res://SingulalityButton.gd" id="5_7mycd"]
+[ext_resource type="Script" uid="uid://bed2ol3doxjwb" path="res://MicroscopicLawUI.gd" id="6_272bh"]
 
 [sub_resource type="Environment" id="Environment_h3515"]
 background_mode = 3
@@ -59,8 +61,10 @@ script = ExtResource("4_1bvp3")
 anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
+script = ExtResource("5_7mycd")
 
 [node name="MicroscopicLawUI" type="Control" parent="." unique_id=709096727]
 anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
+script = ExtResource("6_272bh")
