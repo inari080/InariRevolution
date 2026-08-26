@@ -37,10 +37,10 @@ environment = SubResource("Environment_h3515")
 modulate = Color(1.8247963, 1.8247963, 1.8247963, 1)
 material = SubResource("CanvasItemMaterial_h3515")
 layout_mode = 0
-offset_left = 541.0
-offset_top = 302.0
-offset_right = 581.0
-offset_bottom = 342.0
+offset_left = 482.0
+offset_top = 298.0
+offset_right = 522.0
+offset_bottom = 338.0
 script = ExtResource("1_0xm2m")
 
 [node name="MagneticTrapUI" type="Control" parent="." unique_id=1117794978]
