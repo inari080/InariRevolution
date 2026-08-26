@@ -262,8 +262,8 @@ func _build_sidebar() -> void:
 	sidebar_bg.add_child(rows_vbox)
 	
 	# ★【追加】一番上：黒い空間（遊び場）に戻るボタン
-	singularity_row_button = _add_sidebar_row(rows_vbox, "特異点", "◉", Color(0.55, 0.35, 0.85))
-	singularity_row_button.pressed.connect(_on_singularity_pressed)
+	#singularity_row_button = _add_sidebar_row(rows_vbox, "特異点", "◉", Color(0.55, 0.35, 0.85))
+	#singularity_row_button.pressed.connect(_on_singularity_pressed)
 	
 	trap_row_button = _add_sidebar_row(rows_vbox, "磁気トラップ", "⚛", Color(0.3, 0.75, 1.0))
 	trap_row_button.pressed.connect(_on_tab_pressed)
