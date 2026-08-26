@@ -24,11 +24,11 @@ extends Control
 # ★ main.gd の RESERVED_RIGHT_WIDTH と必ず同じ値にすること
 #   （この幅ぶん、main.gd側でキューブ・粒子の移動範囲が狭められる）
 const SIDEBAR_WIDTH: float = 190.0
-const SIDEBAR_TOP_MARGIN: float = 20.0
-const ROW_HEIGHT: float = 50.0
-const ICON_CIRCLE_SIZE: float = 30.0
-const SIDEBAR_ROW_GAP: float = 8.0
-const SIDEBAR_ROW_PADDING: float = 8.0
+const SIDEBAR_TOP_MARGIN: float = 0.0 # ★特異点ボタン上の余白を無くす
+const ROW_HEIGHT: float = 60.0 # ★少し大きく
+const ICON_CIRCLE_SIZE: float = 36.0 # ★少し大きく
+const SIDEBAR_ROW_GAP: float = 0.0 # ★ボタン同士の隙間を無くす
+const SIDEBAR_ROW_PADDING: float = 0.0 # ★余白ゼロ＝ボタンが帯の端（画面右端）まで埋める
 
 # 粒子インベントリー（グリッド画面）
 const GRID_COLUMNS: int = 6
@@ -186,6 +186,9 @@ func _ready() -> void:
 	_build_panel()
 	_build_sidebar()
 	
+	# ★初期状態では磁気トラップ画面は閉じている＝「特異点」タブがアクティブ
+	_update_active_tab("singularity")
+	
 	# アンカーに頼らず、実際のビューポートサイズを見て絶対座標で配置する
 	_reposition_ui()
 	
@@ -252,37 +255,23 @@ func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: Stri
 	row.flat = false # ★falseにしないと通常時のスタイル(枠線)が描画されない
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
 	
+	# ★枠線・光彩は無し。角丸も無し＝帯いっぱいに埋まる四角いボタン。
 	var style_normal := StyleBoxFlat.new()
 	style_normal.bg_color = Color(0.15, 0.15, 0.17, 0.9)
-	style_normal.border_color = Color(1.0, 1.0, 1.0, 0.12)
-	style_normal.set_border_width_all(1)
-	style_normal.corner_radius_top_left = 10
-	style_normal.corner_radius_top_right = 10
-	style_normal.corner_radius_bottom_left = 10
-	style_normal.corner_radius_bottom_right = 10
+	style_normal.set_border_width_all(0)
+	style_normal.set_corner_radius_all(0)
 	
-	# ★ホバー時：枠の色をアイコンの色にして、外側に光彩(shadow)を出す＝「光る」演出
+	# ★ホバー時：背景を少し明るくするだけ
 	var style_hover := StyleBoxFlat.new()
 	style_hover.bg_color = Color(0.20, 0.20, 0.23, 0.95)
-	style_hover.border_color = icon_color
-	style_hover.set_border_width_all(2)
-	style_hover.corner_radius_top_left = 10
-	style_hover.corner_radius_top_right = 10
-	style_hover.corner_radius_bottom_left = 10
-	style_hover.corner_radius_bottom_right = 10
-	style_hover.shadow_color = Color(icon_color.r, icon_color.g, icon_color.b, 0.55)
-	style_hover.shadow_size = 10
+	style_hover.set_border_width_all(0)
+	style_hover.set_corner_radius_all(0)
 	
+	# ★選択時（＝現在開いているタブ）：発光なし。背景色を明るくするだけで区別する。
 	var style_selected := StyleBoxFlat.new()
-	style_selected.bg_color = Color(0.55, 0.56, 0.58, 1.0)
-	style_selected.border_color = icon_color
-	style_selected.set_border_width_all(2)
-	style_selected.corner_radius_top_left = 10
-	style_selected.corner_radius_top_right = 10
-	style_selected.corner_radius_bottom_left = 10
-	style_selected.corner_radius_bottom_right = 10
-	style_selected.shadow_color = Color(icon_color.r, icon_color.g, icon_color.b, 0.45)
-	style_selected.shadow_size = 8
+	style_selected.bg_color = Color(0.26, 0.26, 0.30, 1.0)
+	style_selected.set_border_width_all(0)
+	style_selected.set_corner_radius_all(0)
 	
 	row.add_theme_stylebox_override("normal", style_normal)
 	row.add_theme_stylebox_override("hover", style_hover)
@@ -475,11 +464,19 @@ func _on_singularity_pressed() -> void:
 	if is_open:
 		_close_trap_screen()
 
+# ★現在開いているタブだけを白く光らせ、他は通常表示に戻す
+func _update_active_tab(active: String) -> void:
+	if trap_row_button:
+		var key := "style_selected" if active == "trap" else "style_normal"
+		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta(key))
+	if singularity_row_button:
+		var key2 := "style_selected" if active == "singularity" else "style_normal"
+		singularity_row_button.add_theme_stylebox_override("normal", singularity_row_button.get_meta(key2))
+
 func _open_trap_screen() -> void:
 	is_open = true
 	
-	if trap_row_button:
-		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta("style_selected"))
+	_update_active_tab("trap")
 	
 	# ★開く瞬間に visible = true にしてから、フェード＋スライドで見せる
 	panel.visible = true
@@ -501,8 +498,7 @@ func _open_trap_screen() -> void:
 func _close_trap_screen() -> void:
 	is_open = false
 	
-	if trap_row_button:
-		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta("style_normal"))
+	_update_active_tab("singularity")
 	
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
