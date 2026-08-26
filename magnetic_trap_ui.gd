@@ -43,8 +43,7 @@ var is_open: bool = false
 var reserved_column: Panel
 var sidebar_bg: Panel
 var trap_row_button: Button
-var trap_row_style_normal: StyleBoxFlat
-var trap_row_style_selected: StyleBoxFlat
+var singularity_row_button: Button
 
 var panel: Panel
 var trap_slots: Array = []
@@ -209,8 +208,8 @@ func _build_sidebar() -> void:
 	
 	# タブの行を積むコンテナ（帯の上部に配置。下は今後タブが増えるまで空のまま）
 	sidebar_bg = Panel.new()
-	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
-	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
+	sidebar_bg.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT * 2)
+	sidebar_bg.size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT * 2)
 	sidebar_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var bg_style := StyleBoxFlat.new()
@@ -222,12 +221,17 @@ func _build_sidebar() -> void:
 	rows_vbox.add_theme_constant_override("separation", 0)
 	sidebar_bg.add_child(rows_vbox)
 	
+	# ★【追加】一番上：黒い空間（遊び場）に戻るボタン
+	singularity_row_button = _add_sidebar_row(rows_vbox, "特異点", "◉", Color(0.55, 0.35, 0.85))
+	singularity_row_button.pressed.connect(_on_singularity_pressed)
+	
 	trap_row_button = _add_sidebar_row(rows_vbox, "磁気トラップ", "⚛", Color(0.3, 0.75, 1.0))
 	trap_row_button.pressed.connect(_on_tab_pressed)
 	
 	add_child(sidebar_bg)
 
 # サイドバーに1行追加する（アイコン丸バッジ＋テキスト）。押せるButtonを返す。
+# ★スタイル(通常時/選択時)はボタン自身にメタデータとして保持する（複数行あっても混ざらないように）
 func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: String, icon_color: Color) -> Button:
 	var row := Button.new()
 	row.custom_minimum_size = Vector2(SIDEBAR_WIDTH, ROW_HEIGHT)
@@ -251,8 +255,9 @@ func _add_sidebar_row(parent: VBoxContainer, label_text: String, icon_text: Stri
 	row.add_theme_stylebox_override("pressed", style_hover)
 	row.add_theme_stylebox_override("focus", style_normal)
 	
-	trap_row_style_normal = style_normal
-	trap_row_style_selected = style_selected
+	# ★このボタン専用のスタイルとして保持（他の行と混ざらないようにmetaに乗せる）
+	row.set_meta("style_normal", style_normal)
+	row.set_meta("style_selected", style_selected)
 	
 	var hbox := HBoxContainer.new()
 	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -350,29 +355,6 @@ func _build_panel() -> void:
 	
 	header.add_child(title_box)
 	
-	var back_button := Button.new()
-	back_button.text = "← 戻る"
-	back_button.custom_minimum_size = Vector2(90, 36)
-	back_button.focus_mode = Control.FOCUS_NONE
-	
-	var back_style := StyleBoxFlat.new()
-	back_style.bg_color = Color(0.16, 0.18, 0.21, 1.0)
-	back_style.border_color = Color(0.4, 0.9, 1.0, 0.6)
-	back_style.set_border_width_all(1)
-	back_style.corner_radius_top_left = 8
-	back_style.corner_radius_top_right = 8
-	back_style.corner_radius_bottom_left = 8
-	back_style.corner_radius_bottom_right = 8
-	back_button.add_theme_stylebox_override("normal", back_style)
-	
-	var back_style_hover := back_style.duplicate()
-	back_style_hover.bg_color = Color(0.22, 0.25, 0.29, 1.0)
-	back_button.add_theme_stylebox_override("hover", back_style_hover)
-	back_button.add_theme_stylebox_override("pressed", back_style_hover)
-	
-	back_button.pressed.connect(_on_tab_pressed)
-	header.add_child(back_button)
-	
 	vbox.add_child(header)
 	vbox.add_child(HSeparator.new())
 	
@@ -440,42 +422,57 @@ func _reposition_ui() -> void:
 
 # --------------------------------------------------------------
 # 開閉トグル（画面切り替え）
-# 開く: 黒い遊び場・キューブ・浮遊中の粒子・下のインベントリーバーを隠す
+# 開く: キューブ・浮遊中の粒子を隠す（インベントリーバーはそのまま表示し続ける）
 # 閉じる: すべて元に戻す
 # --------------------------------------------------------------
 func _on_tab_pressed() -> void:
-	is_open = not is_open
+	if is_open:
+		_close_trap_screen()
+	else:
+		_open_trap_screen()
+
+# ★【追加】サイドバー最上段の「特異点」ボタン：黒い空間（遊び場）に戻る専用
+func _on_singularity_pressed() -> void:
+	if is_open:
+		_close_trap_screen()
+
+func _open_trap_screen() -> void:
+	is_open = true
 	
 	if trap_row_button:
-		trap_row_button.add_theme_stylebox_override(
-			"normal",
-			trap_row_style_selected if is_open else trap_row_style_normal
-		)
+		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta("style_selected"))
 	
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP if is_open else Control.MOUSE_FILTER_IGNORE
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# ★【追加】画面切り替えなので、裏側（遊び場）を隠す/戻す
-	if is_open:
-		get_tree().call_group("cubes", "hide")
-		get_tree().call_group("inventory_bar", "hide")
-		var field = get_tree().get_first_node_in_group("game_field")
-		if field and field.has_method("set_particles_visible"):
-			field.set_particles_visible(false)
-	else:
-		get_tree().call_group("cubes", "show")
-		get_tree().call_group("inventory_bar", "show")
-		var field2 = get_tree().get_first_node_in_group("game_field")
-		if field2 and field2.has_method("set_particles_visible"):
-			field2.set_particles_visible(true)
+	# キューブと浮遊中の粒子を隠す（インベントリーバーは常に表示したままにする）
+	get_tree().call_group("cubes", "hide")
+	var field = get_tree().get_first_node_in_group("game_field")
+	if field and field.has_method("set_particles_visible"):
+		field.set_particles_visible(false)
 	
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.set_ease(Tween.EASE_OUT if is_open else Tween.EASE_IN)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(panel, "position:y", 0.0, ANIM_DURATION)
+	tween.tween_property(panel, "modulate:a", 1.0, ANIM_DURATION)
+
+func _close_trap_screen() -> void:
+	is_open = false
 	
-	if is_open:
-		tween.tween_property(panel, "position:y", 0.0, ANIM_DURATION)
-		tween.tween_property(panel, "modulate:a", 1.0, ANIM_DURATION)
-	else:
-		tween.tween_property(panel, "position:y", CLOSED_Y_OFFSET, ANIM_DURATION)
-		tween.tween_property(panel, "modulate:a", 0.0, ANIM_DURATION)
+	if trap_row_button:
+		trap_row_button.add_theme_stylebox_override("normal", trap_row_button.get_meta("style_normal"))
+	
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	get_tree().call_group("cubes", "show")
+	var field = get_tree().get_first_node_in_group("game_field")
+	if field and field.has_method("set_particles_visible"):
+		field.set_particles_visible(true)
+	
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_IN)
+	tween.tween_property(panel, "position:y", CLOSED_Y_OFFSET, ANIM_DURATION)
+	tween.tween_property(panel, "modulate:a", 0.0, ANIM_DURATION)
