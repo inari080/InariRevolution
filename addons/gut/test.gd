@@ -123,16 +123,20 @@ func _ready():
 	_do_ready_stuff()
 
 
-func _notification(what):
-	# Tests are never expected to re-enter the tree.  Tests are removed from the
-	# tree after they are run.
-	if(what == NOTIFICATION_EXIT_TREE):
-		# print(_strutils.type2str(self), ':  exit_tree')
-		_awaiter.queue_free()
-	elif(what == NOTIFICATION_PREDELETE):
-		# print(_strutils.type2str(self), ':  predelete')
-		if(is_instance_valid(_awaiter)):
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_EXIT_TREE:
+		if is_instance_valid(_awaiter):
 			_awaiter.queue_free()
+			_awaiter = null # ★重要: 参照をクリアして二重処理を防ぐ
+			
+	elif what == NOTIFICATION_PREDELETE:
+		if is_instance_valid(_awaiter):
+			# すでに EXIT_TREE 側で解放待ちになっている可能性があるため、
+			# is_queued_for_deletion() でまだ残っているか二重チェックする
+			if not _awaiter.is_queued_for_deletion():
+				_awaiter.free()
+			_awaiter = null # ★参照をクリア
+
 
 
 #region Private

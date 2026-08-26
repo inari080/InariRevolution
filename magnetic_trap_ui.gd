@@ -1,5 +1,5 @@
 extends Control
-
+class_name MagneticTrapUI
 # ==============================================================
 # 磁気トラップ（Magnetic Trap / 収束器）UI
 #
