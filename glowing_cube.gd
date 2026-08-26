@@ -54,7 +54,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func take_damage() -> void:
 	hp -= 1
-	print("残りHP: ", hp)
+	# ⭕ 競合を避けるため AppLogger.debug に変更
+	AppLogger.debug("キューブダメージ: HP %d → %d" % [hp + 1, hp])
 	
 	if hp <= 0:
 		explode()
@@ -69,7 +70,6 @@ func play_click_animation() -> void:
 # 破壊時の処理
 func explode() -> void:
 	# 自分自身の「描画そのもの（Self Modulate）」のアルファ値だけを 0 にして完全に隠します。
-	# これにより、自分は透明になりつつ、子供である「修復バー」の表示を邪魔しないようになります。
 	self_modulate.a = 0.0
 	
 	# 積み重なる中身を完全にリセット（高さ0にして一番下へ）
@@ -81,15 +81,11 @@ func explode() -> void:
 	var center_pos = original_position + (original_size / 2)
 	
 	# 親のmainノードに、このラウンドで到達していた耐久値(round_capacity)を渡す
-	# → HPが多い状態で壊されたほど、出現する粒子は多くなる
 	var main = get_node("..")
 	if main and main.has_method("spawn_elements"):
 		main.spawn_elements(center_pos, round_capacity)
 
 # 逃した粒子が消えた分だけ、下からハッキリ積み重なっていく
-# ★【変更】HPが満タン(MAX_HP)まで貯まったら、画面上に粒子が残っていても
-#   その時点で即座に完全体（revive）にする。
-#   「粒子を1個残らず回収しないと完全体にならない」問題を解消するため。
 func repair() -> void:
 	hp = clampi(hp + 1, 0, MAX_HP)
 	
@@ -107,7 +103,7 @@ func repair() -> void:
 	if repair_content:
 		var tween = create_tween().set_parallel(true)
 		
-		# 独立した repair_content の「縦幅」を伸ばす（これで確実に映ります）
+		# 独立した repair_content の「縦幅」を伸ばす
 		tween.tween_property(repair_content, "size:y", target_height, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 		# 下から上にせり上がるように「Y座標」を調整
 		tween.tween_property(repair_content, "position:y", original_size.y - target_height, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -115,10 +111,10 @@ func repair() -> void:
 		# 積み重なっている途中は、少し薄め（25%の不透明度）にしてくっきり目立たせる
 		tween.tween_property(repair_content, "modulate:a", 0.25, 0.4)
 		
-	print("四角形が下から結晶化中... 現在の修復度: ", hp_ratio * 100, "%")
+	# ⭕ 競合を避けるため AppLogger.info に変更
+	AppLogger.info("キューブ修復中: %.1f%%" % [hp_ratio * 100])
 
 # 完全復活（100%完全体に戻る）
-# HPが満タンになった瞬間（repair経由）でも、画面上の粒子が全て消えた時（main.gd経由）でも呼ばれる
 func revive() -> void:
 	hp = MAX_HP
 	round_capacity = MAX_HP
@@ -132,4 +128,5 @@ func revive() -> void:
 	if repair_content:
 		tween.tween_property(repair_content, "modulate:a", 0.0, 0.2)
 		
-	print("四角形が100%完全体に復活した！")
+	# ⭕ 競合を避けるため AppLogger.info に変更
+	AppLogger.info("キューブ復活完了")

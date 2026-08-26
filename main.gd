@@ -20,7 +20,7 @@ class ElementItem:
 	var is_grouped: bool = false
 	var ungroup_timer: float = 0.0 # ★グループ範囲から外れてからの経過時間（1秒でグループ解除）
 	var photon_bonus_cooldown: float = 0.0 # ★反発による光子ボーナスの連発を防ぐクールダウン
-	var was_repelling: bool = false # ★直前まで反発状態だったか（1反発イベントにつき1回だけ抽選するため）
+	var was_repelling: bool = false # ★直前まで反発状態だったか（1	反発イベントにつき1回だけ抽選するため）
 	var repelling_now: bool = false # ★今フレームの反発状態（内部スクラッチ用）
 	
 	# ★【追加】クォーク3個1組の合体判定用：近くにクォークが2個以上いる状態が続いた時間
@@ -313,11 +313,14 @@ func _process(delta: float) -> void:
 					
 					# 回収しきった時は勝手に2つの白い物体（spawn_next_stage）を出さないようにします
 					if elements.size() == 0:
-						print("すべての粒子を完璧に回収した！")
+						# ❌ 削除: print("すべての粒子を完璧に回収した！")
+						# ⭕ 競合を避けるため AppLogger.info を使用してログを出力
+						AppLogger.info("全粒子回収完了 - ゲームループへ")
 						# ※ここに将来、次の創造レシピ（水素の誕生など）の処理を入れます
 						get_tree().call_group("cubes", "revive") # 一旦ループのためにキューブを戻します
 					continue
 				# 通常のインベントリーも磁気トラップも満杯 → 回収しない（そのまま漂い続ける）
+
 		else:
 			if item.position.x < radius:
 				item.position.x = radius

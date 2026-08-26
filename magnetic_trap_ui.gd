@@ -97,28 +97,10 @@ class TrapSlot:
 		icon_label.add_theme_font_size_override("font_size", 26)
 		add_child(icon_label)
 		
-		count_label = Label.new()
-		count_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		count_label.position = Vector2(-32, -22)
-		count_label.size = Vector2(28, 18)
-		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		count_label.add_theme_font_size_override("font_size", 12)
-		count_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.9))
+				# （_init 関数の count_label 追加処理の直後から置き換えてください）
 		add_child(count_label)
 	
-	static func _visual_for(type_name: String) -> Dictionary:
-		match type_name:
-			"Quark":
-				return {"text": "Q", "color": Color(1.0, 0.35, 0.35)}
-			"Electron":
-				return {"text": "e⁻", "color": Color(0.4, 1.0, 0.5)}
-			"Photon":
-				return {"text": "γ", "color": Color(1.0, 0.95, 0.4)}
-			"Proton":
-				return {"text": "p⁺", "color": Color(1.0, 0.75, 0.3)}
-			_:
-				return {"text": "?", "color": Color(0.8, 0.8, 0.8)}
+	# ❌ 古いローカルの static func _visual_for() と内部の match 文は完全に削除しました。
 	
 	func _refresh_visual() -> void:
 		if slot_type == "":
@@ -127,7 +109,8 @@ class TrapSlot:
 			add_theme_stylebox_override("panel", style_empty)
 			return
 		
-		var visual: Dictionary = _visual_for(slot_type)
+		# ⭕ 共通化した ParticleVisual クラスから表示用データを取得
+		var visual: Dictionary = ParticleVisual.visual_for(slot_type)
 		
 		var style_filled := StyleBoxFlat.new()
 		style_filled.bg_color = Color(0.14, 0.14, 0.17, 0.95)
@@ -141,6 +124,7 @@ class TrapSlot:
 		
 		icon_label.text = visual["text"]
 		icon_label.add_theme_color_override("font_color", visual["color"])
+		# ⭕ 固有の "x" 付き個数表示ロジックを維持
 		count_label.text = "x" + str(count)
 	
 	func add_one(type_name: String, cap: int) -> bool:
@@ -176,7 +160,8 @@ class TrapSlot:
 		
 		var data := {"particle_type": slot_type, "source_trap_slot": self}
 		
-		var visual: Dictionary = _visual_for(slot_type)
+		# ⭕ ドラッグプレビュー用の見た目も共通化した ParticleVisual クラスを参照
+		var visual: Dictionary = ParticleVisual.visual_for(slot_type)
 		var preview := Label.new()
 		preview.text = visual["text"]
 		preview.add_theme_font_size_override("font_size", 30)
@@ -189,6 +174,7 @@ class TrapSlot:
 		if typeof(data) != TYPE_DICTIONARY or not data.has("particle_type"):
 			return false
 		return has_room(data["particle_type"], CAP)
+
 	
 	func _drop_data(_at_position: Vector2, data) -> void:
 		if not (typeof(data) == TYPE_DICTIONARY and data.has("particle_type")):
