@@ -43,6 +43,15 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		take_damage()
 
+# ★【追加】スペースキー（Godot標準の ui_accept ＝ Space / Enter）でも殴れるようにする
+func _unhandled_input(event: InputEvent) -> void:
+	# 壊れている最中（HPが0以下）や、磁気トラップ画面などで隠れている時は反応しない
+	if hp <= 0 or not visible:
+		return
+	
+	if event.is_action_pressed("ui_accept"):
+		take_damage()
+
 func take_damage() -> void:
 	hp -= 1
 	print("残りHP: ", hp)

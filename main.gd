@@ -21,8 +21,17 @@ class ElementItem:
 # 画面上の粒子たちを記録するリスト
 var elements: Array[ElementItem] = []
 
+# ★【追加】磁気トラップ画面が開いている間はマウスによる吸い寄せ・回収を止める
+var mouse_interaction_enabled: bool = true
+
 const ATTRACT_RADIUS: float = 150.0
 const FLY_SPEED: float = 800.0
+# ★速度に応じた2段階の摩擦
+# 一定の速さ(FRICTION_THRESHOLD)を超えている間だけ強めの摩擦(FRICTION_COEFF_HIGH)がかかり、
+# それ以下の遅い粒子はほとんど減速しない(FRICTION_COEFF_LOW)ようにする
+const FRICTION_THRESHOLD: float = 250.0
+const FRICTION_COEFF_LOW: float = 0.15
+const FRICTION_COEFF_HIGH: float = 3.0
 
 # HPに応じた出現数の調整用パラメータ
 # 「壊れた瞬間のHP(round_capacity)」が少ないほど出現数を少なく、
@@ -172,7 +181,7 @@ func _process(delta: float) -> void:
 		var dist_to_mouse = item.position.distance_to(mouse_pos)
 		
 		if item.lifetime > 0.3:
-			if dist_to_mouse < ATTRACT_RADIUS:
+			if mouse_interaction_enabled and dist_to_mouse < ATTRACT_RADIUS:
 				item.is_attracted = true
 			else:
 				item.is_attracted = false
@@ -182,12 +191,16 @@ func _process(delta: float) -> void:
 			item.velocity = item.velocity.move_toward(direction * FLY_SPEED, delta * 3000.0)
 			item.position += item.velocity * delta
 			
+			# ★【追加】吸い寄せ中でも、右のサイドバーUIや画面外へはみ出さないように制限する
+			item.position.x = clamp(item.position.x, radius, screen_size.x - radius)
+			item.position.y = clamp(item.position.y, radius, screen_size.y - radius)
+			
 			if item.sprite:
 				item.sprite.global_position = item.position
 				item.sprite.modulate = item.color # 吸い込み時は元の鮮やかな色に固定
 				item.sprite.modulate.a = 1.0
 			
-			if dist_to_mouse < 15.0:
+			if dist_to_mouse < 15.0 and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 				# ★【変更】回収した粒子は磁気トラップを経由せず、直接インベントリーへ入れる。
 				# インベントリーが満杯の場合は回収せず、その場に漂わせたままにする。
 				var inventory = get_tree().get_first_node_in_group("inventory_bar")
@@ -244,7 +257,11 @@ func _process(delta: float) -> void:
 				item.has_bounced = true
 				create_wall_bounce_effect(item.position, item.color)
 
-			item.velocity = item.velocity.move_toward(Vector2.ZERO, delta * 8.0)
+			# ★【変更】一定の速さ(FRICTION_THRESHOLD)を超えている時だけ強めの摩擦をかける
+			# → ゆっくり動いている粒子はほぼそのまま漂い続け、速い粒子だけしっかりブレーキがかかる
+			var speed: float = item.velocity.length()
+			var friction_coeff: float = FRICTION_COEFF_HIGH if speed > FRICTION_THRESHOLD else FRICTION_COEFF_LOW
+			item.velocity -= item.velocity * friction_coeff * delta
 			item.position += item.velocity * delta
 			
 			if item.sprite:
@@ -269,6 +286,7 @@ func _draw() -> void:
 # 浮遊中の粒子スプライトを隠す/戻すための切り替え関数。
 # キューブ自体は magnetic_trap_ui.gd 側から call_group("cubes","hide"/"show") で制御する。
 func set_particles_visible(v: bool) -> void:
+	mouse_interaction_enabled = v # ★【追加】非表示＝マウスでの吸い寄せ・回収も同時に無効化
 	for item in elements:
 		if item.sprite:
 			item.sprite.visible = v
